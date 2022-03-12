@@ -3,9 +3,10 @@ import os
 import shutil
 import sys
 
+from system_hotkey import SystemHotkey
 from PyQt5 import QtCore
 from PyQt5.QtCore import QSize, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QPushButton, QLabel, QHBoxLayout, QListWidgetItem, \
     QFrame, QMessageBox
 
@@ -93,6 +94,8 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
         self.pushButton_3.clicked.connect(self.open_save_dir)
         self.pushButton_2.clicked.connect(self.open_backup_dir)
         self.pushButton_4.clicked.connect(self.refresh)
+
+        SystemHotkey().register(("f11",), callback=lambda x: self.pushButton.clicked.emit())
 
         if not os.path.exists(_BACKUP_DIR):
             try:
