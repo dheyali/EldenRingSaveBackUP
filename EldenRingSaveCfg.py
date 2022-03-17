@@ -2,17 +2,18 @@ import datetime
 import os
 import shutil
 import sys
+import shelve
 
 from system_hotkey import SystemHotkey
 from PyQt5 import QtCore
 from PyQt5.QtCore import QSize, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap
+from PyQt5.QtGui import QFont, QPixmap, QIcon
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QPushButton, QLabel, QHBoxLayout, QListWidgetItem, \
-    QFrame, QMessageBox
+    QFrame, QMessageBox, QFileDialog
 
 from UI_EldenRingSaveCfg import Ui_MainWindow
 
-_SAVE_DIR = os.path.join(os.path.expanduser('~'), "AppData\Roaming\EldenRing")
+_SAVE_DIR = os.path.join(os.path.expanduser('~'), r"AppData\Roaming\EldenRing")
 _BACKUP_DIR = r"C:\EldenRingBackUp"
 
 
@@ -81,6 +82,7 @@ class MyLabel(QWidget):
                 self.deleted.emit()
             except Exception as err:
                 QMessageBox.warning(self, '警告', "删除当前备份失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+                return
 
 
 class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
@@ -90,18 +92,35 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.setFixedSize(560, 350)
 
+        self.label_config.setFixedSize(19, 19)
+        icon = QPixmap(":/icon/Config.png").scaled(self.label_config.width(), self.label_config.height())
+        self.label_config.setIcon(QIcon(icon))
+
         self.pushButton.clicked.connect(self.backup)
         self.pushButton_3.clicked.connect(self.open_save_dir)
         self.pushButton_2.clicked.connect(self.open_backup_dir)
         self.pushButton_4.clicked.connect(self.refresh)
+        self.label_config.clicked.connect(self.config_backup_dir)
 
         SystemHotkey().register(("f11",), callback=lambda x: self.pushButton.clicked.emit())
+
+        _config_file_dir = os.path.join(os.path.expanduser('~'), r"AppData\Roaming\EldenRingBackUpConfig")
+        if os.path.exists(_config_file_dir):
+            try:
+                global _BACKUP_DIR
+
+                config_file = shelve.open(os.path.join(_config_file_dir, "Config"))
+                _BACKUP_DIR = config_file["backup_dir"]
+                config_file.close()
+            except Exception as err:
+                QMessageBox.warning(self, '警告', "读取备份位置失败，将使用默认位置备份！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
 
         if not os.path.exists(_BACKUP_DIR):
             try:
                 os.makedirs(_BACKUP_DIR)
             except Exception as err:
-                QMessageBox.warning(self, '警告', str(err), QMessageBox.Ok, QMessageBox.Ok)
+                QMessageBox.warning(self, '警告', "创建备份目录失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+                return
 
         for saved in reversed(os.listdir(_BACKUP_DIR)):
             item_widget = QListWidgetItem()
@@ -117,12 +136,54 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
             os.startfile(_SAVE_DIR)
         except Exception as err:
             QMessageBox.warning(self, '警告', str(err), QMessageBox.Ok, QMessageBox.Ok)
+            return
 
     def open_backup_dir(self):
         try:
             os.startfile(_BACKUP_DIR)
         except Exception as err:
             QMessageBox.warning(self, '警告', str(err), QMessageBox.Ok, QMessageBox.Ok)
+            return
+
+    def config_backup_dir(self):
+        _config_file_dir = os.path.join(os.path.expanduser('~'), r"AppData\Roaming\EldenRingBackUpConfig")
+        if not os.path.exists(_config_file_dir):
+            try:
+                os.makedirs(_config_file_dir)
+            except Exception as err:
+                QMessageBox.warning(self, '警告', "无法创建自定义文件，将使用默认配置！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+                return
+
+        global _BACKUP_DIR
+        dir = QFileDialog.getExistingDirectory(self, "请选择备份文件夹位置", _BACKUP_DIR)
+        if not dir:
+            return
+
+        try:
+            config_file = shelve.open(os.path.join(_config_file_dir, "Config"))
+            config_file["backup_dir"] = dir
+            config_file.close()
+        except Exception as err:
+            QMessageBox.warning(self, '警告', "无法创建自定义文件，将使用默认配置！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+            return
+
+        try:
+            for backuped in os.listdir(_BACKUP_DIR):
+                shutil.copytree(os.path.join(_BACKUP_DIR, backuped), os.path.join(dir, backuped))
+        except Exception as err:
+            QMessageBox.warning(self, '警告', "拷贝旧存档失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+            _BACKUP_DIR = dir
+            return
+
+        try:
+            shutil.rmtree(_BACKUP_DIR)
+        except Exception as err:
+            QMessageBox.warning(self, '警告', "删除旧存档失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+            _BACKUP_DIR = dir
+            return
+
+        _BACKUP_DIR = dir
+        self.refresh()
 
     def backup(self):
         try:
