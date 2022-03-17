@@ -158,6 +158,9 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
         dir = QFileDialog.getExistingDirectory(self, "请选择备份文件夹位置", _BACKUP_DIR)
         if not dir:
             return
+        if os.path.samefile(dir, _SAVE_DIR):
+            QMessageBox.warning(self, '警告', "与存档位置重叠，不允许在此处备份！", QMessageBox.Ok, QMessageBox.Ok)
+            return
 
         try:
             config_file = shelve.open(os.path.join(_config_file_dir, "Config"))
