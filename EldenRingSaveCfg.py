@@ -170,12 +170,19 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
             QMessageBox.warning(self, '警告', "无法创建自定义文件，将使用默认配置！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
             return
 
+        result = QMessageBox.question(self, '提示', "是否拷贝旧存档至当前位置，并删除旧的备份文件夹？", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if result == QMessageBox.No:
+            _BACKUP_DIR = dir
+            self.refresh()
+            return
+
         try:
             for backuped in os.listdir(_BACKUP_DIR):
                 shutil.copytree(os.path.join(_BACKUP_DIR, backuped), os.path.join(dir, backuped))
         except Exception as err:
             QMessageBox.warning(self, '警告', "拷贝旧存档失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
             _BACKUP_DIR = dir
+            self.refresh()
             return
 
         try:
