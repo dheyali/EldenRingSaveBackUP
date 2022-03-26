@@ -5,11 +5,11 @@ import sys
 import shelve
 
 from system_hotkey import SystemHotkey
-from PyQt5 import QtCore
-from PyQt5.QtCore import QSize, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap, QIcon
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtCore import QSize, pyqtSignal, QRect, QTimer, Qt
+from PyQt5.QtGui import QFont, QPixmap, QIcon, QPainter
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QPushButton, QLabel, QHBoxLayout, QListWidgetItem, \
-    QFrame, QMessageBox, QFileDialog
+    QFrame, QMessageBox, QFileDialog, QInputDialog, QLineEdit
 
 from UI_EldenRingSaveCfg import Ui_MainWindow
 
@@ -17,9 +17,49 @@ _SAVE_DIR = os.path.join(os.path.expanduser('~'), r"AppData\Roaming\EldenRing")
 _BACKUP_DIR = r"C:\EldenRingBackUp"
 
 
+class Label2(QLabel):
+    def __init__(self, parent=None):
+        super(Label2, self).__init__(parent)
+
+        self.setFixedWidth(340)
+
+        self.text_rect = QRect(0, 0, 0, 0)
+        self.start_pos = 0
+        self.text_changed = True
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_pos)
+        self.timer.start(250)
+
+    def paintEvent(self, e):
+        painter = QPainter(self)
+        painter.setFont(QFont("Arial", 11, QFont.Bold))
+
+        if self.text_rect.width() > self.width() and self.text_changed:
+            painter.drawText(QRect(self.start_pos, 0, self.text_rect.width(), self.height()), Qt.AlignLeft | Qt.AlignVCenter, self.text())
+        else:
+            self.text_rect = painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.AlignLeft | Qt.AlignVCenter, self.text())
+            self.text_changed = True
+
+    def update_pos(self):
+        if (self.text_rect.width() + self.start_pos) > self.width():
+            self.start_pos = self.start_pos - 5
+        else:
+            self.start_pos = 10
+
+        self.update()
+
+    # 备用函数，为后续不重建列表时，更新标题效果预留
+    def on_text_changed(self):
+        self.text_changed = False
+        self.update()
+
+
 class MyLabel(QWidget):
     # 删除信号
     deleted = pyqtSignal()
+    # 重命名信号
+    renamed = pyqtSignal()
 
     def __init__(self, title):
         super(MyLabel, self).__init__()
@@ -29,14 +69,15 @@ class MyLabel(QWidget):
         icon = QPixmap(":/icon/Elden.png").scaled(self.lb_icon.width(), self.lb_icon.height())
         self.lb_icon.setPixmap(icon)
 
-        self.lb_title = QLabel(title)
-        self.lb_title.setFont(QFont("Arial", 11, QFont.Bold))
+        self.lb_title = Label2(title)
         self.line = QFrame()
         self.line.setFrameShape(QFrame.VLine)
         self.lb_recovery = QPushButton("恢复")
         self.lb_recovery.setFont(QFont("Arial", 11, QFont.Bold))
         self.lb_delete = QPushButton("删除")
         self.lb_delete.setFont(QFont("Arial", 11, QFont.Bold))
+        self.lb_rename = QPushButton("重命名")
+        self.lb_rename.setFont(QFont("Arial", 11, QFont.Bold))
 
         self.lb_main = QHBoxLayout()
         self.lb_main.addWidget(self.lb_icon)
@@ -44,14 +85,17 @@ class MyLabel(QWidget):
         self.lb_main.addWidget(self.line)
         self.lb_main.addWidget(self.lb_recovery)
         self.lb_main.addWidget(self.lb_delete)
-        self.lb_main.setStretch(0, 6)
+        self.lb_main.addWidget(self.lb_rename)
+        self.lb_main.setStretch(0, 7)
         self.lb_main.setStretch(3, 1)
         self.lb_main.setStretch(4, 1)
+        self.lb_main.setStretch(5, 1)
 
         self.setLayout(self.lb_main)
 
         self.lb_recovery.clicked.connect(self.recovery)
         self.lb_delete.clicked.connect(self.delete)
+        self.lb_rename.clicked.connect(self.rename)
 
     def recovery(self):
         result = QMessageBox.warning(self, '警告', "是否确认恢复？这将覆盖当前存档！", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -79,18 +123,27 @@ class MyLabel(QWidget):
         else:
             try:
                 shutil.rmtree(os.path.join(_BACKUP_DIR, self.lb_title.text()))
-                self.deleted.emit()
+                self.deleted.emit() # 此处暂时采用刷新方式
             except Exception as err:
                 QMessageBox.warning(self, '警告', "删除当前备份失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
                 return
 
+    def rename(self):
+        text, okPressed = QInputDialog.getText(self, "重命名", "请输入新的文件名：", QLineEdit.Normal, self.lb_title.text())
+        if okPressed and text != '':
+            try:
+                shutil.move(os.path.join(_BACKUP_DIR, self.lb_title.text()), os.path.join(_BACKUP_DIR, text))
+                self.renamed.emit()
+            except Exception as err:
+                QMessageBox.warning(self, '警告', "重命名备份文件失败！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
+                return
 
 class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
 
     def __init__(self, parent=None):
         super(EldenRingSaveCfg, self).__init__(parent)
         self.setupUi(self)
-        self.setFixedSize(560, 350)
+        self.setFixedSize(self.width(), self.height())
 
         self.label_config.setFixedSize(19, 19)
         icon = QPixmap(":/icon/Config.png").scaled(self.label_config.width(), self.label_config.height())
@@ -129,6 +182,7 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
 
             label = MyLabel(saved)
             label.deleted.connect(self.refresh)
+            label.renamed.connect(self.refresh)
             self.listWidget.setItemWidget(item_widget, label)
 
     def open_save_dir(self):
@@ -170,7 +224,8 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
             QMessageBox.warning(self, '警告', "无法创建自定义文件，将使用默认配置！" + str(err), QMessageBox.Ok, QMessageBox.Ok)
             return
 
-        result = QMessageBox.question(self, '提示', "是否拷贝旧存档至当前位置，并删除旧的备份文件夹？", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        result = QMessageBox.question(self, '提示', "是否拷贝旧存档至当前位置，并删除旧的备份文件夹？", QMessageBox.Yes | QMessageBox.No,
+                                      QMessageBox.No)
         if result == QMessageBox.No:
             _BACKUP_DIR = dir
             self.refresh()
@@ -209,6 +264,7 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
 
         label = MyLabel(folderName)
         label.deleted.connect(self.refresh)
+        label.renamed.connect(self.refresh)
         self.listWidget.setItemWidget(item_widget, label)
 
     def refresh(self):
@@ -225,6 +281,7 @@ class EldenRingSaveCfg(QMainWindow, Ui_MainWindow):
 
             label = MyLabel(saved)
             label.deleted.connect(self.refresh)
+            label.renamed.connect(self.refresh)
             self.listWidget.setItemWidget(item_widget, label)
 
 
