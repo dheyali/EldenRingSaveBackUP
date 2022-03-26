@@ -5,7 +5,7 @@ import sys
 import shelve
 
 from system_hotkey import SystemHotkey
-from PyQt5 import QtCore, QtGui
+from PyQt5 import QtCore
 from PyQt5.QtCore import QSize, pyqtSignal, QRect, QTimer, Qt
 from PyQt5.QtGui import QFont, QPixmap, QIcon, QPainter
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QPushButton, QLabel, QHBoxLayout, QListWidgetItem, \
